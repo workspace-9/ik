@@ -254,3 +254,22 @@ func Append[T any](s iter.Seq[T], t T) iter.Seq[T] {
     }
   }
 }
+
+// Tee the values in s to yield1, returning a new Seq which can be
+// consumed elsewhere.
+func Tee[T any](s iter.Seq[T], yield1 func(t T) bool) iter.Seq[T] {
+  return func(yield2 func(T) bool) {
+    var done1, done2 bool
+    s(func(t T) bool {
+      if !done1 {
+        done1 = yield1(t)
+      }
+
+      if !done2 {
+        done2 = yield2(t)
+      }
+
+      return done1 && done2
+    })
+  }
+}
