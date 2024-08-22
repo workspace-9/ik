@@ -223,3 +223,19 @@ func Elide[T any](s iter.Seq2[T, error]) iter.Seq[T] {
 		})
 	}
 }
+
+// Prepend t to s.
+// This helps solve one of my least favorite features of ticker:
+//
+// for now := range Prepend(time.Now(), Chan(time.Tick(duration))) {
+//   // do ticker-y logic
+// }
+func Prepend[T any](t T, s iter.Seq[T]) iter.Seq[T] {
+  return func(yield func(T) bool) {
+    if !yield(t) {
+      return
+    }
+
+    s(yield)
+  }
+}
