@@ -241,15 +241,15 @@ func Prepend[T any](t T, s iter.Seq[T]) iter.Seq[T] {
 }
 
 // Append t to s.
-func Append[T any](s iter.Seq[T], t T) iter.Seq[T] {
+func Append[T any](t T, s iter.Seq[T]) iter.Seq[T] {
   return func(yield func(T) bool) {
-    var done bool
+    var cont bool
     s(func(t T) bool {
-      done = yield(t)
-      return done
+      cont = yield(t)
+      return cont
     })
 
-    if !done {
+    if cont {
       yield(t)
     }
   }
@@ -259,17 +259,17 @@ func Append[T any](s iter.Seq[T], t T) iter.Seq[T] {
 // consumed elsewhere.
 func Tee[T any](s iter.Seq[T], yield1 func(t T) bool) iter.Seq[T] {
   return func(yield2 func(T) bool) {
-    var done1, done2 bool
+    var continue1, continue2 bool = true, true
     s(func(t T) bool {
-      if !done1 {
-        done1 = yield1(t)
+      if continue1 {
+        continue1 = yield1(t)
       }
 
-      if !done2 {
-        done2 = yield2(t)
+      if continue2 {
+        continue2 = yield2(t)
       }
 
-      return done1 && done2
+      return continue1 || continue2
     })
   }
 }

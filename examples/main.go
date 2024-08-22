@@ -2,6 +2,7 @@ package main
 
 import (
   "database/sql"
+  "encoding/json"
   "fmt"
   "io"
   "slices"
@@ -87,7 +88,13 @@ a,b,c,d,e,f,g
 
   fmt.Println(Collect(SliceRef(s)))
 
-  for tok := range Elide(Json(io.NopCloser(strings.NewReader(`[1, 2, 3, 4, 5]`)))) {
+  for tok := range Tee(Elide(Json(io.NopCloser(strings.NewReader(`[1, 2, 3, 4, 5]`)))), func(t json.Token) bool {
+    fmt.Printf("%T\n", t)
+    return false
+  }) {
     fmt.Println(tok)
   }
+
+  fmt.Println(Collect(Prepend(1, slices.Values(s))))
+  fmt.Println(Collect(Append(100, slices.Values(s))))
 }
