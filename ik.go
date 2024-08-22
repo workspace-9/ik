@@ -239,3 +239,18 @@ func Prepend[T any](t T, s iter.Seq[T]) iter.Seq[T] {
     s(yield)
   }
 }
+
+// Append t to s.
+func Append[T any](s iter.Seq[T], t T) iter.Seq[T] {
+  return func(yield func(T) bool) {
+    var done bool
+    s(func(t T) bool {
+      done = yield(t)
+      return done
+    })
+
+    if !done {
+      yield(t)
+    }
+  }
+}
