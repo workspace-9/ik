@@ -273,3 +273,18 @@ func Tee[T any](s iter.Seq[T], yield1 func(t T) bool) iter.Seq[T] {
     })
   }
 }
+
+// Pair of values.
+type Pair[K, V any] struct {
+  K K
+  V V
+}
+
+// Seq2Seq makes a Seq out of a Seq2
+func Seq2Seq[K, V any](s iter.Seq2[K, V]) iter.Seq[Pair[K, V]] {
+  return func(yield func(Pair[K, V]) bool) {
+    s(func(k K, v V) bool {
+      return yield(Pair[K, V]{k, v})
+    })
+  }
+}
