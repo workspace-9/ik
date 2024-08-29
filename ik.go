@@ -40,11 +40,16 @@ func Reduce[T, U any](s iter.Seq[T], reduce func(t T, u U) U, init U) U {
 	return init
 }
 
+// CollectInto collects s into collection useing collectInto
+func CollectInto[T, C any](s iter.Seq[T], collection C, addElement func(element T, collection C) C) C {
+	return Reduce(s, addElement, collection)
+}
+
 // Collect s into a slice.
 func Collect[T any](s iter.Seq[T]) []T {
-	return Reduce(s, func(t T, s []T) []T {
+	return CollectInto(s, make([]T, 0), func(t T, s []T) []T {
 		return append(s, t)
-	}, nil)
+	})
 }
 
 // Take the first n values from s.
@@ -227,64 +232,182 @@ func Elide[T any](s iter.Seq2[T, error]) iter.Seq[T] {
 // Prepend t to s.
 // This helps solve one of my least favorite features of ticker:
 //
-// for now := range Prepend(time.Now(), Chan(time.Tick(duration))) {
-//   // do ticker-y logic
-// }
+//	for now := range Prepend(time.Now(), Chan(time.Tick(duration))) {
+//	  // do ticker-y logic
+//	}
 func Prepend[T any](t T, s iter.Seq[T]) iter.Seq[T] {
-  return func(yield func(T) bool) {
-    if !yield(t) {
-      return
-    }
+	return func(yield func(T) bool) {
+		if !yield(t) {
+			return
+		}
 
-    s(yield)
-  }
+		s(yield)
+	}
 }
 
 // Append t to s.
 func Append[T any](t T, s iter.Seq[T]) iter.Seq[T] {
-  return func(yield func(T) bool) {
-    var cont bool
-    s(func(t T) bool {
-      cont = yield(t)
-      return cont
-    })
+	return func(yield func(T) bool) {
+		var cont bool
+		s(func(t T) bool {
+			cont = yield(t)
+			return cont
+		})
 
-    if cont {
-      yield(t)
-    }
-  }
+		if cont {
+			yield(t)
+		}
+	}
 }
 
 // Tee the values in s to yield1, returning a new Seq which can be
 // consumed elsewhere.
 func Tee[T any](s iter.Seq[T], yield1 func(t T) bool) iter.Seq[T] {
-  return func(yield2 func(T) bool) {
-    var continue1, continue2 bool = true, true
-    s(func(t T) bool {
-      if continue1 {
-        continue1 = yield1(t)
-      }
+	return func(yield2 func(T) bool) {
+		var continue1, continue2 bool = true, true
+		s(func(t T) bool {
+			if continue1 {
+				continue1 = yield1(t)
+			}
 
-      if continue2 {
-        continue2 = yield2(t)
-      }
+			if continue2 {
+				continue2 = yield2(t)
+			}
 
-      return continue1 || continue2
-    })
-  }
+			return continue1 || continue2
+		})
+	}
 }
 
 // Pair of values.
 type Pair[K, V any] struct {
-  K K
-  V V
+	K K
+	V V
 }
 
 // Seq2Seq makes a Seq out of a Seq2
 func Seq2Seq[K, V any](s iter.Seq2[K, V]) iter.Seq[Pair[K, V]] {
-  return func(yield func(Pair[K, V]) bool) {
-    s(func(k K, v V) bool {
-      return yield(Pair[K, V]{k, v})
-    })
-  }
+	return func(yield func(Pair[K, V]) bool) {
+		s(func(k K, v V) bool {
+			return yield(Pair[K, V]{k, v})
+		})
+	}
+}
+
+// Until yields values until until returns false.
+func Until[T any](s iter.Seq[T], until func(T) bool) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		s(func(t T) bool {
+			if until(t) {
+				return yield(t)
+			}
+
+			return false
+		})
+	}
+}
+
+// Skip the first n values.
+func Skip[T any](s iter.Seq[T], n int) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		i := 0
+		s(func(t T) bool {
+			if i < n {
+				i++
+				return true
+			}
+
+			return yield(t)
+		})
+	}
+}
+
+// First returns the first value in s which matches the given predicate.
+func First[T any](s iter.Seq[T], predicate func(T) bool) (t T, ok bool) {
+	s(func(iterT T) bool {
+		if predicate(iterT) {
+			t = iterT
+			ok = true
+			return false
+		}
+
+		return true
+	})
+	return
+}
+
+// Max returns the maximum element in s
+func Max[T cmp.Ordered](s iter.Seq[T]) (t T, ok bool) {
+	s(func(iterT T) bool {
+		if !ok || t > iterT {
+			ok = true
+			t = iterT
+		}
+		return true
+	})
+
+	return
+}
+
+// Max returns the maximum element in s
+func Min[T cmp.Ordered](s iter.Seq[T]) (t T, ok bool) {
+	s(func(iterT T) bool {
+		if !ok || t < iterT {
+			ok = true
+			t = iterT
+		}
+		return true
+	})
+
+	return
+}
+
+// IsSorted returns:
+// 1: array is sorted in ascending order
+// 0: array is unsorted
+// -1: array is sorted in descending order
+func IsSorted[T cmp.Ordered](s iter.Seq[T]) int {
+	return IsSortedBy(s, cmp.Compare[T])
+}
+
+// IsSortedBy returns:
+// 1: array is sorted in ascending order
+// 0: array is unsorted
+// -1: array is sorted in descending order
+func IsSortedBy[T any](s iter.Seq[T], order func(a, b T) int) int {
+	var lastV struct {
+		v       T
+		ok      bool
+		cmpSign struct {
+			sign int
+			ok   bool
+		}
+	}
+	for v := range s {
+		if !lastV.ok {
+			lastV.ok = true
+			lastV.v = v
+			goto loopEnd
+		}
+
+		if !lastV.cmpSign.ok {
+			lastV.cmpSign.ok = true
+			lastV.cmpSign.sign = order(v, lastV.v)
+			goto loopEnd
+		}
+
+		if order(v, lastV.v) != lastV.cmpSign.sign {
+			return 0
+		}
+
+	loopEnd:
+		lastV.v = v
+		lastV.ok = true
+	}
+
+	if !lastV.cmpSign.ok {
+		return 1
+	}
+
+	return lastV.cmpSign.sign
 }
